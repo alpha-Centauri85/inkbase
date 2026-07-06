@@ -400,6 +400,128 @@ app.post("/api/manual", async (req, res) => {
 });
 
 // ------------------------------------------------------------
+// Batch upload (bare ISBNs -> Google Books lookup -> Shopify)
+// ------------------------------------------------------------
+
+async function fetchGoogleBooksByIsbn(isbn) {
+  const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Google Books HTTP ${res.status}`);
+
+  const data = await res.json();
+  const item = data.items?.[0];
+  if (!item) return null;
+
+  const v = item.volumeInfo || {};
+  return {
+    isbn,
+    title: (v.title || "").trim(),
+    author: (v.authors && v.authors.join(", ")) || "",
+    genre: (v.categories && v.categories.join(", ")) || "",
+    description: v.description || "",
+  };
+}
+
+app.post("/api/batch", async (req, res) => {
+  const items = req.body?.items;
+
+  const customBlurb = req.body?.customBlurb || "";
+  const bookSize = req.body?.bookSize || "";
+
+  if (!Array.isArray(items)) {
+    return res.status(400).json({ error: "Expected JSON body: { items: [...] }" });
+  }
+  if (items.length > 50) {
+    return res.status(400).json({ error: "Max 50 books per batch (for now)." });
+  }
+
+  const mutation = `
+    mutation CreateProduct($input: ProductInput!) {
+      productCreate(input: $input) {
+        product {
+          id
+          title
+          variants(first: 1) {
+            nodes { id }
+          }
+        }
+        userErrors { field message }
+      }
+    }
+  `;
+
+  const results = [];
+
+  for (const rawItem of items) {
+    const isbn = (rawItem.isbn || "").trim();
+
+    if (!isbn) {
+      results.push({ ok: false, isbn, error: "Missing isbn" });
+      continue;
+    }
+
+    let book;
+    try {
+      book = await fetchGoogleBooksByIsbn(isbn);
+    } catch (err) {
+      results.push({ ok: false, isbn, error: `Book lookup failed: ${err.message}` });
+      continue;
+    }
+
+    if (!book || !book.title) {
+      results.push({ ok: false, isbn, error: "No book found for that ISBN" });
+      continue;
+    }
+
+    const descriptionHtml = buildDescriptionHtml({
+      synopsis: book.description,
+      customBlurb,
+      bookSize,
+    });
+
+    const input = {
+      title: book.title,
+      vendor: book.author,
+      productType: book.genre,
+      descriptionHtml,
+      tags: ["Book", "Used"].concat(book.genre ? [book.genre] : []),
+      status: "DRAFT",
+    };
+
+    try {
+      const { status, json } = await shopifyGraphQL(mutation, { input });
+
+      const userErrors = json?.data?.productCreate?.userErrors || [];
+      const product = json?.data?.productCreate?.product || null;
+      const variantId = product?.variants?.nodes?.[0]?.id || null;
+
+      let variantUpdate = null;
+      if (product && variantId) {
+        const vRes = await shopifyGraphQL(variantUpdateMutation, {
+          productId: product.id,
+          variants: [{ id: variantId, barcode: isbn, sku: `BOOK-${isbn}` }],
+        });
+        variantUpdate = vRes.json;
+      }
+
+      results.push({
+        ok: status === 200 && userErrors.length === 0 && Boolean(product),
+        isbn,
+        title: book.title,
+        product,
+        userErrors,
+        variantUpdate,
+        rawErrors: Array.isArray(json?.errors) ? json.errors : [],
+      });
+    } catch (err) {
+      results.push({ ok: false, isbn, title: book.title, error: err.message });
+    }
+  }
+
+  res.json({ count: items.length, results });
+});
+
+// ------------------------------------------------------------
 // Diagnostics
 // ------------------------------------------------------------
 
