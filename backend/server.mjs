@@ -23,6 +23,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import crypto from "crypto";
+import fs from "fs";
 
 const app = express();
 app.use(cors());
@@ -139,6 +140,27 @@ async function shopifyGraphQL(query, variables) {
   return { status: res.status, json };
 }
 
+function persistAdminTokenToEnvFile(token) {
+  const envPath = new URL("./.env", import.meta.url);
+  let contents = "";
+  try {
+    contents = fs.readFileSync(envPath, "utf8");
+  } catch {
+    contents = "";
+  }
+
+  const line = `SHOPIFY_ADMIN_TOKEN=${token}`;
+  const pattern = /^SHOPIFY_ADMIN_TOKEN=.*$/m;
+
+  if (pattern.test(contents)) {
+    contents = contents.replace(pattern, line);
+  } else {
+    contents = contents.length && !contents.endsWith("\n") ? `${contents}\n${line}\n` : `${contents}${line}\n`;
+  }
+
+  fs.writeFileSync(envPath, contents, "utf8");
+}
+
 // ------------------------------------------------------------
 // OAuth bootstrap (run once to obtain SHOPIFY_ADMIN_TOKEN)
 // ------------------------------------------------------------
@@ -197,14 +219,18 @@ app.get("/auth/callback", async (req, res) => {
     return res.status(tokenRes.status).json(tokenJson);
   }
 
-  // This is the token you must save into .env as SHOPIFY_ADMIN_TOKEN
   const accessToken = tokenJson.access_token;
 
-  console.log("✅ SHOPIFY_ADMIN_TOKEN =", accessToken);
+  SHOPIFY_ADMIN_TOKEN = accessToken;
+  persistAdminTokenToEnvFile(accessToken);
 
-  // For this prototype we DO NOT auto-write .env.
-  // You paste it into .env and restart.
-  res.send("OAuth complete. Check server console for SHOPIFY_ADMIN_TOKEN, paste it into .env, then restart the backend.");
+  console.log("Shopify connected — token saved to backend/.env");
+
+  res.send("OAuth complete. Token saved automatically — you can close this tab.");
+});
+
+app.get("/auth/status", (req, res) => {
+  res.json({ connected: Boolean(SHOPIFY_ADMIN_TOKEN) });
 });
 
 // ------------------------------------------------------------
