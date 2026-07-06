@@ -1,0 +1,944 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Book Scanner Prototype</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 820px; margin: 40px auto; padding: 0 16px; }
+      h1 { margin-bottom: 6px; }
+      .hint { color: #555; margin-top: 6px; }
+      code { background: #f3f3f3; padding: 2px 6px; border-radius: 6px; }
+
+      /* Tabs */
+      .tabs { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+      .tab-btn {
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        background: #fff;
+        cursor: pointer;
+      }
+      .tab-btn[aria-selected="true"] { border-color: #333; font-weight: 600; }
+      .tab-panel { display: none; padding: 14px; border: 1px solid #ddd; border-radius: 12px; }
+      .tab-panel.active { display: block; }
+
+      input, textarea, button {
+        font-size: 16px;
+      }
+      input, textarea {
+        width: 100%;
+        padding: 12px;
+        box-sizing: border-box;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+      }
+      textarea { min-height: 110px; resize: vertical; }
+      button {
+        padding: 10px 12px;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        background: #fff;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .row { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+      .row > * { flex: 1; min-width: 220px; }
+
+      .copybox{
+        white-space: pre-wrap;
+        user-select: text;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        background: #fafafa;
+        margin: 10px 0 0 0;
+      }
+
+      .list { list-style: none; padding: 0; margin: 12px 0 0 0; }
+      .item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        margin-bottom: 8px;
+      }
+      .item-left { display: flex; flex-direction: column; }
+      .muted { color: #555; font-size: 13px; }
+      .error { color: #a00; font-size: 12px; margin-top: 4px; }
+
+      /* Don't treat radios/checkboxes like text inputs */
+      input[type="radio"],
+      input[type="checkbox"] {
+        width: auto;
+        padding: 0;
+        border: none;
+        border-radius: 0;
+      }
+      /* 2 Column Radio Style */
+      .radio-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(200px, 1fr));
+        gap: 6px 16px;
+      }
+      .radio-grid label { margin: 0; }
+    </style>
+  </head>
+
+  <body>
+    <h1>Book Scanner Prototype</h1>
+    <div class="hint">Use tabs to switch between modes. Scanner focus stays on the active tab.</div>
+
+    <!-- Tab buttons -->
+    <div class="tabs" role="tablist" aria-label="Scanner modes">
+      <button class="tab-btn" role="tab" id="tab-single" aria-controls="panel-single" aria-selected="true">Single Scan</button>
+      <button class="tab-btn" role="tab" id="tab-batch" aria-controls="panel-batch" aria-selected="false">Batch Scan</button>
+      <button class="tab-btn" role="tab" id="tab-manual" aria-controls="panel-manual" aria-selected="false">Manual Entry</button>
+    </div>
+
+    <!-- SINGLE SCAN PANEL -->
+    <section class="tab-panel active" role="tabpanel" id="panel-single" aria-labelledby="tab-single">
+      <p>Click the box, then scan a barcode.</p>
+
+      <input id="single-barcode" placeholder="Scan ISBN/barcode here..." autofocus />
+      <div class="hint">If your scanner sends <code>Enter</code>, it will submit immediately. Otherwise it uses a short timer.</div>
+      
+      <section class="config-section">
+        <h3>Listing Add-ons</h3>
+
+        <label>
+          Custom Blurb (appears under synopsis):
+          <textarea id="single-customBlurb" rows="6" placeholder="Condition notes, store message, shipping info..."></textarea>
+        </label>
+
+        <label>
+          <div style="margin-top: 10px;">
+            <div class="muted" style="margin-bottom:6px;">Book Size:</div>
+
+            <fieldset style="border:0; padding:0; margin:0;" class="radio-grid">
+              <label style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+                <input type="radio" name="single-bookSize" value="Pocket Paperback" />
+                Pocket Paperback
+              </label>
+
+              <label style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+                <input type="radio" name="single-bookSize" value="Standard Paperback" />
+                Standard Paperback
+              </label>
+
+              <label style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+                <input type="radio" name="single-bookSize" value="Trade Paperback" />
+                Trade Paperback
+              </label>
+
+              <label style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+                <input type="radio" name="single-bookSize" value="Hardcover" />
+                Hardcover
+              </label>
+
+              <label style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+                <input type="radio" name="single-bookSize" value="Large Format" />
+                Large Format
+              </label>
+            </fieldset>
+          </div>
+        </label>
+      </section>
+      <h3>Last scan</h3>
+      <ul id="single-scans" class="list"></ul>
+
+      <div id="single-book-display" style="display:none; margin-top: 12px;">
+        <h3 id="single-book-title" style="margin: 0 0 8px 0;"></h3>
+        <p><strong>Author:</strong> <span id="single-book-author"></span></p>
+        <p><strong>ISBN:</strong> <span id="single-book-isbn"></span></p>
+        <p><strong>Genre:</strong> <span id="single-book-genre"></span></p>
+        <p><strong>Publisher:</strong> <span id="single-book-publisher"></span></p>
+        <p><strong>Published:</strong> <span id="single-book-published"></span></p>
+        <pre id="single-book-description" class="copybox"></pre>
+        <p id="single-book-status" class="muted"></p>
+      </div>
+      <div class="row" style="margin-top: 12px;">
+        <button id="single-submitBtn" disabled>Submit to Shopify</button>
+        <button id="single-editBtn" disabled>Edit in Manual</button>
+      </div>
+      <div id="single-submitStatus" class="muted"></div>
+    </section>
+  
+    <!-- BATCH SCAN PANEL -->
+    <section class="tab-panel" role="tabpanel" id="panel-batch" aria-labelledby="tab-batch">
+      <p>Scan multiple ISBNs. They accumulate in a list. Upload when ready.</p>
+
+      <input id="batch-barcode" inputmode="numeric" autocomplete="off" placeholder="Scan ISBN…" />
+
+      <div class="row" style="align-items:center;">
+        <div>
+          <button id="batch-uploadBtn">Upload batch</button>
+          <button id="batch-clearBtn">Clear list</button>
+        </div>
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="batch-dedupeToggle" checked />
+          Dedupe duplicates
+        </label>
+      </div>
+
+      <div id="batch-stats" class="muted"></div>
+      <ul id="batch-scans" class="list"></ul>
+    </section>
+
+    <!-- MANUAL ENTRY PANEL -->
+    <section class="tab-panel" role="tabpanel" id="panel-manual" aria-labelledby="tab-manual">
+      <p>Type details manually (useful when a book has no barcode or it’s damaged).</p>
+
+      <div class="row">
+        <div>
+          <label class="muted">ISBN</label>
+          <input id="manual-isbn" placeholder="978..." />
+        </div>
+        <div>
+          <label class="muted">Title</label>
+          <input id="manual-title" placeholder="Book title" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label class="muted">Author</label>
+          <input id="manual-author" placeholder="Author name" />
+        </div>
+        <div>
+          <label class="muted">Genre</label>
+          <input id="manual-genre" placeholder="Genre" />
+        </div>
+      </div>
+
+      <label class="muted">Description</label>
+      <textarea id="manual-description" placeholder="Short synopsis / notes..."></textarea>
+      
+      <section class="config-section">
+        <h3>Listing Add-ons</h3>
+
+        <label>
+          Custom Blurb (appears under synopsis):
+          <textarea id="manual-customBlurb" rows="6" placeholder="Condition notes, store message, shipping info..."></textarea>
+        </label>
+
+        <label>
+          <div style="margin-top: 10px;">
+            <div class="muted" style="margin-bottom:6px;">Book Size:</div>
+
+            <fieldset style="border:0; padding:0; margin:0;" class="radio-grid">
+              <label style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+                <input type="radio" name="manual-bookSize" value="Pocket Paperback" />
+                Pocket Paperback
+              </label>
+
+              <label style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+                <input type="radio" name="manual-bookSize" value="Standard Paperback" />
+                Standard Paperback
+              </label>
+
+              <label style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+                <input type="radio" name="manual" value="Trade Paperback" />
+                Trade Paperback
+              </label>
+
+              <label style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+                <input type="radio" name="manual" value="Hardcover" />
+                Hardcover
+              </label>
+
+              <label style="display:flex; align-items:center; gap:8px; margin:6px 0;">
+                <input type="radio" name="manual" value="Large Format" />
+                Large Format
+              </label>
+            </fieldset>
+          </div>
+        </label>
+      </section>
+      
+      <div class="row">
+        <button id="manual-addBtn">Add to Manual List</button>
+        <button id="manual-uploadBtn">Upload Manual List</button>
+        <button id="manual-clearBtn">Clear Manual List</button>
+      </div>
+
+      <div id="manual-stats" class="muted"></div>
+      <ul id="manual-list" class="list"></ul>
+    </section>
+
+    <script>
+      // -----------------------------
+      // Shared helpers
+      // -----------------------------
+      const SCAN_DONE_DELAY_MS = 80;
+
+      function normalizeIsbn(raw) {
+        return String(raw || "").toUpperCase().replace(/[^0-9X]/g, "");
+      }
+
+      function decodeHtmlEntities(str) {
+        const txt = document.createElement("textarea");
+        txt.innerHTML = str;
+        return txt.value;
+      }
+
+      function normalizeText(str) {
+        if (!str) return "";
+        let s = str
+          .replace(/<\s*br\s*\/?>/gi, "\n")
+          .replace(/<\/\s*p\s*>/gi, "\n\n")
+          .replace(/<[^>]*>/g, "");
+        s = decodeHtmlEntities(s);
+        s = s.normalize("NFC");
+        s = s
+          .replace(/[\u2018\u2019]/g, "'")
+          .replace(/[\u201C\u201D]/g, '"')
+          .replace(/[\u2013\u2014]/g, "-");
+        s = s
+          .replace(/\u00A0/g, " ")
+          .replace(/[\u200B-\u200D\uFEFF]/g, "")
+          .replace(/\n{3,}/g, "\n\n")
+          .replace(/[ \t]{2,}/g, " ")
+          .trim();
+        s = s.replace(/\uFFFD/g, "");
+        return s;
+      }
+
+      const API_BASE = "http://localhost:3000";
+
+      const DEFAULT_CUSTOM_BLURB = `Your default blurb goes here.`;
+
+      function readAddOns(prefix) {
+        const customBlurb = document.getElementById(`${prefix}-customBlurb`)?.value?.trim() || "";
+
+        // Radio group: name="{prefix}-bookSize"
+        const checked = document.querySelector(`input[name="${prefix}-bookSize"]:checked`);
+        const bookSize = checked ? checked.value : "";
+
+        return { customBlurb, bookSize };
+      }
+
+      function initDefaultBlurb() {
+        const KEY = "default_custom_blurb_v1";
+
+        // load saved custom default (if user edited it previously)
+        const saved = localStorage.getItem(KEY);
+        const defaultText = (saved ?? DEFAULT_CUSTOM_BLURB).trim();
+
+        // fill BOTH textareas (single + manual)
+        const single = document.getElementById("single-customBlurb");
+        const manual = document.getElementById("manual-customBlurb");
+
+        if (single && !single.value.trim()) single.value = defaultText;
+        if (manual && !manual.value.trim()) manual.value = defaultText;
+
+        // keep them in sync + save edits
+        function wire(el) {
+          if (!el) return;
+          el.addEventListener("input", () => {
+            const v = el.value;
+            localStorage.setItem(KEY, v);
+
+            // mirror to the other box so both tabs match
+            if (el.id === "single-customBlurb" && manual) manual.value = v;
+            if (el.id === "manual-customBlurb" && single) single.value = v;
+          });
+        }
+
+        wire(single);
+        wire(manual);
+      }
+
+
+      async function uploadToShopify(book, addOns = {}) {
+        const res = await fetch(`${API_BASE}/upload-books`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ books: [book], ...addOns }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data?.error || `Upload failed (${res.status})`);
+        }
+
+        const r = data?.results?.[0];
+
+        if (!r?.ok) {
+          const userErrorsText = Array.isArray(r?.userErrors)
+            ? r.userErrors.map(e => e?.message).filter(Boolean).join("; ")
+            : "";
+
+          const rawErrorsText = Array.isArray(r?.rawErrors)
+            ? r.rawErrors.map(e => e?.message || String(e)).filter(Boolean).join("; ")
+            : (r?.rawErrors ? String(r.rawErrors) : "");
+
+          const msg =
+            userErrorsText ||
+            rawErrorsText ||
+            r?.error ||
+            "Unknown Shopify error";
+
+          throw new Error(msg);
+        }
+
+        return r;
+      }
+
+      initDefaultBlurb();
+
+      // -----------------------------
+      // Tabs
+      // -----------------------------
+      const tabs = [
+        { btn: document.getElementById("tab-single"), panel: document.getElementById("panel-single"), focusEl: document.getElementById("single-barcode") },
+        { btn: document.getElementById("tab-batch"),  panel: document.getElementById("panel-batch"),  focusEl: document.getElementById("batch-barcode") },
+        { btn: document.getElementById("tab-manual"), panel: document.getElementById("panel-manual"), focusEl: document.getElementById("manual-isbn") },
+      ];
+
+      let activeTab = "single";
+
+      function setActiveTab(name) {
+        activeTab = name;
+        for (const t of tabs) {
+          const isActive = t.btn.id === `tab-${name}`;
+          t.btn.setAttribute("aria-selected", String(isActive));
+          t.panel.classList.toggle("active", isActive);
+          if (isActive) setTimeout(() => t.focusEl.focus(), 0);
+        }
+      }
+
+      for (const t of tabs) {
+        t.btn.addEventListener("click", () => {
+          const name = t.btn.id.replace("tab-", "");
+          setActiveTab(name);
+        });
+      }
+
+      // Keep focus on the active tab's main input when clicking empty space
+      window.addEventListener("click", (e) => {
+        // allow selecting/copying inside panels
+        if (e.target.closest("input, textarea, button, pre, a, label")) return;
+        const active = tabs.find(t => t.btn.id === `tab-${activeTab}`);
+        active?.focusEl?.focus();
+      });
+
+      // -----------------------------
+      // Single Scan
+      // -----------------------------
+      (function initSingleScan() {
+        const singleInput = document.getElementById("single-barcode");
+        const singleList = document.getElementById("single-scans");
+
+        const submitBtn = document.getElementById("single-submitBtn");
+        const editBtn = document.getElementById("single-editBtn");
+        const submitStatus = document.getElementById("single-submitStatus");
+
+        let lastBookForSubmit = null;
+
+        const display = document.getElementById("single-book-display");
+        const titleEl = document.getElementById("single-book-title");
+        const authorEl = document.getElementById("single-book-author");
+        const isbnEl = document.getElementById("single-book-isbn");
+        const genreEl = document.getElementById("single-book-genre");
+        const publisherEl = document.getElementById("single-book-publisher");
+        const publishedEl = document.getElementById("single-book-published");
+        const descEl = document.getElementById("single-book-description");
+        const statusEl = document.getElementById("single-book-status");
+
+        let timer = null;
+
+        function setSubmitEnabled(enabled) {
+          submitBtn.disabled = !enabled;
+          editBtn.disabled = !enabled;
+        }
+        setSubmitEnabled(false);
+
+        function showStatus(msg) {
+          statusEl.textContent = msg;
+          display.style.display = "block";
+        }
+
+        function displayBook(book) {
+          titleEl.textContent = book.title || "Unknown title";
+          authorEl.textContent = book.author || "Unknown author";
+          isbnEl.textContent = book.isbn || "";
+          genreEl.textContent = book.genre || "";
+          publisherEl.textContent = book.publisher || "";
+          publishedEl.textContent = book.publishedDate || "";
+          descEl.textContent = book.description || "";
+          statusEl.textContent = book.status || "";
+          display.style.display = "block";
+        }
+
+        async function fetchBookData(isbn) {
+          // Reset state for a new scan
+          lastBookForSubmit = null;
+          setSubmitEnabled(false);
+          submitStatus.textContent = "";
+
+          showStatus("Looking up book data...");
+
+          try {
+            const res = await fetch(
+              `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`
+            );
+            if (!res.ok) throw new Error(`Google Books HTTP ${res.status}`);
+
+            const data = await res.json();
+
+            if (!data.items || data.items.length === 0) {
+              displayBook({ isbn, title: "Not found", status: "No book found for that ISBN." });
+              submitStatus.textContent = "Not found — use Manual Entry tab to add this book.";
+              return;
+            }
+
+            const v = data.items[0].volumeInfo;
+
+            const book = {
+              isbn,
+              title: (v.title || "").trim(),
+              author: (v.authors && v.authors.join(", ")) || "",
+              genre: (v.categories && v.categories.join(", ")) || "",
+              description: normalizeText(v.description || ""),
+              publisher: v.publisher || "",
+              publishedDate: v.publishedDate || "",
+            };
+
+            displayBook({ ...book, status: "" });
+
+            lastBookForSubmit = book;
+            setSubmitEnabled(true);
+            submitStatus.textContent =
+              "Ready to submit. Confirm the details match the book in your hand.";
+          } catch (err) {
+            console.error(err);
+            displayBook({ isbn, title: "Error", description: String(err), status: "Error fetching book data." });
+            submitStatus.textContent = `Lookup failed: ${err.message || String(err)}`;
+          }
+        }
+
+        function submitSingleScan() {
+          const raw = singleInput.value.trim();
+          singleInput.value = "";
+          if (!raw) return;
+
+          const isbn = normalizeIsbn(raw);
+
+          singleList.innerHTML = "";
+          const li = document.createElement("li");
+          li.className = "item";
+          li.innerHTML = `<div class="item-left"><div><strong>${isbn}</strong></div><div class="muted">${new Date().toLocaleTimeString()} — Single scan</div></div>`;
+          singleList.prepend(li);
+
+          fetchBookData(isbn);
+        }
+
+        singleInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            clearTimeout(timer);
+            submitSingleScan();
+            return;
+          }
+          clearTimeout(timer);
+          timer = setTimeout(submitSingleScan, SCAN_DONE_DELAY_MS);
+        });
+
+        submitBtn.addEventListener("click", async () => {
+          if (!lastBookForSubmit) return;
+
+          submitBtn.disabled = true;
+          editBtn.disabled = true;
+          submitStatus.textContent = "Uploading to Shopify…";
+
+          try {
+            const addOns = readAddOns("single");
+
+            const result = await uploadToShopify({
+              isbn: lastBookForSubmit.isbn,
+              title: lastBookForSubmit.title,
+              author: lastBookForSubmit.author,
+              genre: lastBookForSubmit.genre,
+              description: lastBookForSubmit.description,
+            }, addOns);
+
+
+            submitStatus.textContent = `Uploaded ✓ Shopify Product ID: ${result.product?.id || "unknown"}`;
+            // Optional: keep disabled to prevent double-submit
+            // setSubmitEnabled(false);
+          } catch (err) {
+            submitStatus.textContent = `Upload failed: ${err.message || String(err)}`;
+            setSubmitEnabled(true);
+          }
+        });
+
+        editBtn.addEventListener("click", () => {
+          if (!lastBookForSubmit) return;
+
+          document.getElementById("manual-isbn").value = lastBookForSubmit.isbn || "";
+          document.getElementById("manual-title").value = lastBookForSubmit.title || "";
+          document.getElementById("manual-author").value = lastBookForSubmit.author || "";
+          document.getElementById("manual-genre").value = lastBookForSubmit.genre || "";
+          document.getElementById("manual-description").value = lastBookForSubmit.description || "";
+
+          setActiveTab("manual");
+        });
+      })();
+
+      // -----------------------------
+      // Batch Scan
+      // -----------------------------
+      (function initBatchScan(){
+        const batchInput = document.getElementById("batch-barcode");
+        const listEl = document.getElementById("batch-scans");
+        const uploadBtn = document.getElementById("batch-uploadBtn");
+        const clearBtn = document.getElementById("batch-clearBtn");
+        const statsEl = document.getElementById("batch-stats");
+        const dedupeToggle = document.getElementById("batch-dedupeToggle");
+
+        const STORAGE_KEY = "batch_scans_v1";
+        let timer = null;
+
+        let items = loadItems();
+        render();
+
+        function loadItems() {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? JSON.parse(raw) : [];
+          } catch {
+            return [];
+          }
+        }
+
+        function saveItems() {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+        }
+
+        function moveToTop(isbn) {
+          const idx = items.findIndex((x) => x.isbn === isbn);
+          if (idx <= 0) return;
+          const [it] = items.splice(idx, 1);
+          items.unshift(it);
+        }
+
+        function submitBatchScan() {
+          const raw = batchInput.value.trim();
+          batchInput.value = "";
+          if (!raw) return;
+
+          const isbn = normalizeIsbn(raw);
+
+          if (dedupeToggle.checked) {
+            const existing = items.find((x) => x.isbn === isbn && x.status !== "ok");
+            if (existing) {
+              existing.scannedAt = new Date().toISOString();
+              moveToTop(existing.isbn);
+              saveItems();
+              render();
+              return;
+            }
+          }
+
+          items.unshift({ isbn, scannedAt: new Date().toISOString(), status: "pending" });
+          saveItems();
+          render();
+        }
+
+        batchInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            clearTimeout(timer);
+            submitBatchScan();
+            return;
+          }
+          clearTimeout(timer);
+          timer = setTimeout(submitBatchScan, SCAN_DONE_DELAY_MS);
+        });
+
+        clearBtn.addEventListener("click", () => {
+          items = [];
+          saveItems();
+          render();
+          batchInput.focus();
+        });
+
+        uploadBtn.addEventListener("click", async () => {
+          const pending = items.filter((x) => x.status === "pending" || x.status === "failed");
+          if (pending.length === 0) return;
+
+          for (const it of pending) { it.status = "uploading"; delete it.error; }
+          saveItems();
+          render();
+
+          try {
+            const res = await fetch(`${API_BASE}/api/batch`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ items: pending.map((x) => ({ isbn: x.isbn, scannedAt: x.scannedAt })) }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || `Upload failed (${res.status})`);
+
+            const byIsbn = new Map((data.results || []).map((r) => [r.isbn, r]));
+
+            for (const it of pending) {
+              const r = byIsbn.get(it.isbn);
+              if (r?.ok) it.status = "ok";
+              else { it.status = "failed"; it.error = r?.error || "Unknown error"; }
+            }
+
+            saveItems();
+            render();
+          } catch (err) {
+            for (const it of items) {
+              if (it.status === "uploading") {
+                it.status = "failed";
+                it.error = err.message || "Network error";
+              }
+            }
+            saveItems();
+            render();
+          }
+        });
+
+        function render() {
+          const total = items.length;
+          const pending = items.filter((x) => x.status === "pending").length;
+          const uploading = items.filter((x) => x.status === "uploading").length;
+          const ok = items.filter((x) => x.status === "ok").length;
+          const failed = items.filter((x) => x.status === "failed").length;
+
+          statsEl.textContent = `Total: ${total} | Pending: ${pending} | Uploading: ${uploading} | OK: ${ok} | Failed: ${failed}`;
+
+          listEl.innerHTML = "";
+          for (const it of items) {
+            const li = document.createElement("li");
+            li.className = "item";
+
+            const left = document.createElement("div");
+            left.className = "item-left";
+
+            const top = document.createElement("div");
+            top.innerHTML = `<strong>${it.isbn}</strong>`;
+
+            const sub = document.createElement("div");
+            sub.className = "muted";
+            sub.textContent = `${new Date(it.scannedAt).toLocaleTimeString()} — ${statusLabel(it)}`;
+
+            left.appendChild(top);
+            left.appendChild(sub);
+
+            if (it.status === "failed" && it.error) {
+              const err = document.createElement("div");
+              err.className = "error";
+              err.textContent = it.error;
+              left.appendChild(err);
+            }
+
+            const right = document.createElement("div");
+            const del = document.createElement("button");
+            del.textContent = "Remove";
+            del.addEventListener("click", () => {
+              items = items.filter((x) => x !== it);
+              saveItems();
+              render();
+            });
+            right.appendChild(del);
+
+            li.appendChild(left);
+            li.appendChild(right);
+            listEl.appendChild(li);
+          }
+        }
+
+        function statusLabel(it) {
+          switch (it.status) {
+            case "pending": return "Pending";
+            case "uploading": return "Uploading…";
+            case "ok": return "Uploaded ✓";
+            case "failed": return "Failed ✕";
+            default: return it.status;
+          }
+        }
+      })();
+
+      // -----------------------------
+      // Manual Entry
+      // -----------------------------
+      (function initManual(){
+        const isbnEl = document.getElementById("manual-isbn");
+        const titleEl = document.getElementById("manual-title");
+        const authorEl = document.getElementById("manual-author");
+        const genreEl = document.getElementById("manual-genre");
+        const descEl = document.getElementById("manual-description");
+
+        const addBtn = document.getElementById("manual-addBtn");
+        const uploadBtn = document.getElementById("manual-uploadBtn");
+        const clearBtn = document.getElementById("manual-clearBtn");
+
+        const listEl = document.getElementById("manual-list");
+        const statsEl = document.getElementById("manual-stats");
+
+        const STORAGE_KEY = "manual_list_v1";
+        let items = loadItems();
+        render();
+
+        function loadItems() {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? JSON.parse(raw) : [];
+          } catch {
+            return [];
+          }
+        }
+        function saveItems() {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+        }
+
+        function clearForm() {
+          isbnEl.value = "";
+          titleEl.value = "";
+          authorEl.value = "";
+          genreEl.value = "";
+          descEl.value = "";
+        }
+
+        addBtn.addEventListener("click", () => {
+          const isbn = normalizeIsbn(isbnEl.value);
+          const title = titleEl.value.trim();
+          const author = authorEl.value.trim();
+          const genre = genreEl.value.trim();
+          const description = descEl.value.trim();
+
+          if (!isbn && !title) {
+            // minimal guard: at least something to identify the book
+            return;
+          }
+
+          items.unshift({
+            isbn,
+            title,
+            author,
+            genre,
+            description,
+            createdAt: new Date().toISOString(),
+            status: "pending"
+          });
+
+          saveItems();
+          render();
+          clearForm();
+          isbnEl.focus();
+        });
+
+        clearBtn.addEventListener("click", () => {
+          items = [];
+          saveItems();
+          render();
+          clearForm();
+          isbnEl.focus();
+        });
+
+        uploadBtn.addEventListener("click", async () => {
+          const pending = items.filter(x => x.status === "pending" || x.status === "failed");
+          if (pending.length === 0) return;
+
+          for (const it of pending) { it.status = "uploading"; delete it.error; }
+          saveItems();
+          render();
+
+          try {
+            const addOns = readAddOns("manual");
+            
+            const res = await fetch(`${API_BASE}/api/manual`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ items: pending, ...addOns }),
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error || `Upload failed (${res.status})`);
+
+            const byKey = new Map((data.results || []).map((r) => [r.clientKey, r]));
+
+            for (const it of pending) {
+              const key = clientKey(it);
+              const r = byKey.get(key);
+              if (r?.ok) it.status = "ok";
+              else { it.status = "failed"; it.error = r?.error || "Unknown error"; }
+            }
+
+            saveItems();
+            render();
+          } catch (err) {
+            for (const it of items) {
+              if (it.status === "uploading") {
+                it.status = "failed";
+                it.error = err.message || "Network error";
+              }
+            }
+            saveItems();
+            render();
+          }
+        });
+
+        function clientKey(it) {
+          // a stable-ish identifier for matching response rows
+          return `${it.isbn || ""}|${it.title || ""}|${it.createdAt || ""}`;
+        }
+
+        function render() {
+          statsEl.textContent = `Manual items: ${items.length}`;
+          listEl.innerHTML = "";
+
+          for (const it of items) {
+            const li = document.createElement("li");
+            li.className = "item";
+
+            const left = document.createElement("div");
+            left.className = "item-left";
+
+            const top = document.createElement("div");
+            top.innerHTML = `<strong>${it.title || it.isbn || "Untitled"}</strong>`;
+
+            const sub = document.createElement("div");
+            sub.className = "muted";
+            sub.textContent = `${new Date(it.createdAt).toLocaleTimeString()} — ${it.author || ""} ${it.genre ? "• " + it.genre : ""} • ${it.status}`;
+
+            left.appendChild(top);
+            left.appendChild(sub);
+
+            if (it.status === "failed" && it.error) {
+              const err = document.createElement("div");
+              err.className = "error";
+              err.textContent = it.error;
+              left.appendChild(err);
+            }
+
+            const right = document.createElement("div");
+            const del = document.createElement("button");
+            del.textContent = "Remove";
+            del.addEventListener("click", () => {
+              items = items.filter((x) => x !== it);
+              saveItems();
+              render();
+            });
+            right.appendChild(del);
+
+            li.appendChild(left);
+            li.appendChild(right);
+            listEl.appendChild(li);
+          }
+        }
+      })();
+    </script>
+  </body>
+</html>

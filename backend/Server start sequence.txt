@@ -1,0 +1,2 @@
+$env:SHOPIFY_ADMIN_TOKEN="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v"
+npm start
