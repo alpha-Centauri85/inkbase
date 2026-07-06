@@ -1,4 +1,5 @@
 {
+  "name": "inkbase",
   "dependencies": {
     "dotenv": "^17.2.3"
   }
