@@ -52,6 +52,11 @@ const API_VERSION = process.env.SHOPIFY_API_VERSION || "2026-01";
 // Server port
 const PORT = Number(process.env.PORT || 3000);
 
+// Optional Google Books API key — without one, lookups share Google's low-volume
+// anonymous daily quota. Get a free key at https://console.cloud.google.com/
+// (enable the "Books API", create an API Key credential) and put it in .env.
+const GOOGLE_BOOKS_API_KEY = process.env.GOOGLE_BOOKS_API_KEY || "";
+
 const variantUpdateMutation = `
   mutation VariantBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
     productVariantsBulkUpdate(productId: $productId, variants: $variants) {
@@ -110,6 +115,10 @@ if (!SHOPIFY_CLIENT_ID || !SHOPIFY_CLIENT_SECRET) {
 // Do NOT exit if token missing, because we need /auth to generate it.
 if (!SHOPIFY_ADMIN_TOKEN) {
   console.warn("SHOPIFY_ADMIN_TOKEN is missing. Generate it by visiting: http://localhost:3000/auth");
+}
+
+if (!GOOGLE_BOOKS_API_KEY) {
+  console.warn("GOOGLE_BOOKS_API_KEY is missing. Book lookups will share Google's low-volume anonymous quota.");
 }
 
 // ------------------------------------------------------------
@@ -430,7 +439,8 @@ app.post("/api/manual", async (req, res) => {
 // ------------------------------------------------------------
 
 async function fetchGoogleBooksByIsbn(isbn) {
-  const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}`;
+  const keyParam = GOOGLE_BOOKS_API_KEY ? `&key=${encodeURIComponent(GOOGLE_BOOKS_API_KEY)}` : "";
+  const url = `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}${keyParam}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Google Books HTTP ${res.status}`);
 
@@ -445,8 +455,27 @@ async function fetchGoogleBooksByIsbn(isbn) {
     author: (v.authors && v.authors.join(", ")) || "",
     genre: (v.categories && v.categories.join(", ")) || "",
     description: v.description || "",
+    publisher: v.publisher || "",
+    publishedDate: v.publishedDate || "",
   };
 }
+
+app.get("/api/book-lookup", async (req, res) => {
+  const isbn = (req.query.isbn || "").trim();
+  if (!isbn) {
+    return res.status(400).json({ error: "Missing isbn query param" });
+  }
+
+  try {
+    const book = await fetchGoogleBooksByIsbn(isbn);
+    if (!book) {
+      return res.json({ found: false, isbn });
+    }
+    res.json({ found: true, ...book });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
 
 app.post("/api/batch", async (req, res) => {
   const items = req.body?.items;
