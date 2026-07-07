@@ -28,12 +28,15 @@ A new shared `PriceCheck` component (price input + "Check price" button +
 inline results list) is used by both `SingleScanPanel` and
 `ManualEntryPanel`. Clicking "Check price" calls a new backend endpoint,
 `GET /api/price-check?title=...&author=...`, which queries SerpApi's
-Google Shopping engine (scoped to NZ pricing via `gl=nz` /
-`google_domain=google.co.nz`) and returns up to 5 results. Results render
-as a simple inline list — not a modal/popover overlay, matching the app's
-existing lightweight style (no modals appear anywhere else in the app).
-Clicking a result fills the price field; the field can also be typed into
-directly at any time.
+Google Shopping engine **twice** — once scoped to NZ (`gl=nz`,
+`google_domain=google.co.nz`) and once to AU (`gl=au`,
+`google_domain=google.com.au`) — and returns the top 3 results from each
+market (up to 6 total), each labeled with its currency (NZD/AUD). Results
+render as a simple inline list — not a modal/popover overlay, matching the
+app's existing lightweight style (no modals appear anywhere else in the
+app). Clicking a result fills the price field with just the numeric value
+(currency label is for context only, not stored); the field can also be
+typed into directly at any time.
 
 Price is **per-book data**, unlike the existing Custom Blurb / Book Size
 fields, which apply as a single shared value across an entire upload batch.
@@ -48,13 +51,13 @@ the existing upload requests to `/upload-books` and `/api/manual`.
   price `<input>` plus a "Check price" button. Manages its own
   `checking` / `results` / `error` state internally — this is UI-local
   state, not lifted to the parent panel. On click, calls a new
-  `checkPrice({ title, author })` helper. Renders up to 5 results as rows
-  like `$12.50 — Trade Me`; clicking a row calls `onPriceChange(price)`.
-  Shows "No comparable listings found" or an inline error message on
-  failure — the price field always stays directly editable regardless of
-  lookup outcome.
+  `checkPrice({ title, author })` helper. Renders up to 6 results (3 NZD +
+  3 AUD) as rows like `$12.50 NZD — Trade Me`; clicking a row calls
+  `onPriceChange(price)` with just the numeric value. Shows "No comparable
+  listings found" or an inline error message on failure — the price field
+  always stays directly editable regardless of lookup outcome.
 - **`frontend/src/lib/api.js`** (modified): add
-  `checkPrice({ title, author }): Promise<{ results: {price, source}[] }>`,
+  `checkPrice({ title, author }): Promise<{ results: {price, currency, source}[] }>`,
   calling `GET /api/price-check?title=...&author=...` via the existing
   `getJSON` helper.
 - **`frontend/src/pages/SingleScanPanel.jsx`** (modified): adds a `price`
@@ -69,7 +72,8 @@ the existing upload requests to `/upload-books` and `/api/manual`.
   changes needed to `QueueList.jsx` itself, since it just renders whatever
   string `renderSub` returns.
 - **`backend/server.mjs`** (modified):
-  - New `GET /api/price-check?title=&author=` route calling SerpApi.
+  - New `GET /api/price-check?title=&author=` route calling SerpApi twice
+    (NZ + AU) and merging the results.
   - New `SERPAPI_KEY` env var (same pattern as the existing
     `GOOGLE_BOOKS_API_KEY`): read once at startup, a startup warning logged
     if missing (not a fatal exit, same as the other optional keys).
@@ -85,12 +89,20 @@ the existing upload requests to `/upload-books` and `/api/manual`.
    lookup, or typed into the Manual Entry form).
 2. User clicks "Check price".
 3. Frontend calls `GET /api/price-check?title=...&author=...`.
-4. Backend calls SerpApi's `google_shopping` engine with
-   `q={title} {author}`, `gl=nz`, `google_domain=google.co.nz`, using
-   `SERPAPI_KEY`.
-5. Backend extracts `{ price, source }` from the top 5 entries in SerpApi's
-   `shopping_results` array and returns `{ results: [...] }`.
-6. `PriceCheck` renders the results; clicking one fills the price field.
+4. Backend makes two parallel calls to SerpApi's `google_shopping` engine
+   with `q={title} {author}`, using `SERPAPI_KEY`:
+   - NZ: `gl=nz`, `google_domain=google.co.nz`
+   - AU: `gl=au`, `google_domain=google.com.au`
+5. From each response, backend extracts the top 3 entries from
+   `shopping_results` as `{ price, currency, source }` (`currency` is set
+   by the backend based on which call produced the result — `"NZD"` or
+   `"AUD"` — not parsed from SerpApi's price string). Both sets are
+   concatenated (NZ results first, then AU) into one `results` array of up
+   to 6 entries and returned as `{ results: [...] }`. If one market's call
+   fails while the other succeeds, the successful market's results are
+   still returned (see Error Handling).
+6. `PriceCheck` renders the results; clicking one fills the price field
+   with the numeric value only.
 
 **Price submission:**
 1. On "Submit to Shopify" (Single Scan) or "Upload Manual List" (Manual
@@ -111,9 +123,14 @@ the existing upload requests to `/upload-books` and `/api/manual`.
   `PriceCheck` shows this message inline; the price field remains
   manually editable.
 - **SerpApi network/API failure** (rate limit, timeout, malformed
-  response): caught server-side, returned as a clean `{ error: "..." }`
-  message with an appropriate non-200 status — never crashes the request
-  or blocks manual price entry/submission.
+  response): each of the two market calls (NZ/AU) is handled
+  independently. If both fail, the endpoint returns a clean
+  `{ error: "..." }` message with an appropriate non-200 status. If only
+  one fails, the endpoint still returns HTTP 200 with whatever results the
+  successful market produced (possibly an empty array for the failed
+  market) — a single market's outage never blocks the other's results.
+  Either way, this never crashes the request or blocks manual price
+  entry/submission.
 - **Zero results**: returned as `{ results: [] }` (success, not an error);
   `PriceCheck` shows "No comparable listings found" — an expected, normal
   outcome for obscure or self-published titles.
@@ -126,7 +143,8 @@ the existing upload requests to `/upload-books` and `/api/manual`.
 No automated test suite exists in this project (established in Phase 1)
 and this feature does not introduce one. Verification is manual:
 - "Check price" against the real SerpApi key for a well-known, popular book
-  — should return up to 5 results with price + seller.
+  — should return up to 6 results (3 NZD + 3 AUD) with price + currency +
+  seller.
 - "Check price" for an obscure/fabricated title — should show "No
   comparable listings found".
 - Temporarily unset `SERPAPI_KEY`, confirm the missing-key error displays
@@ -143,6 +161,6 @@ and this feature does not introduce one. Verification is manual:
 - Caching of price-check results — each click is a fresh SerpApi call.
 - Automatic/background price-checking on every scan — on-demand button
   only, to control SerpApi usage/cost.
-- Currency conversion logic — results are requested directly in NZD via
-  SerpApi's `gl=nz` parameter; no client-side conversion of mixed
-  currencies is performed.
+- Currency conversion logic — NZ and AU results are shown side by side,
+  each labeled with its own currency; no conversion between NZD and AUD is
+  performed anywhere in the flow.
