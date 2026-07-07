@@ -45,7 +45,7 @@ export default function PriceCheck({ price, onPriceChange, title, author }) {
             <li
               key={idx}
               className="item"
-              onClick={() => onPriceChange(String(r.price))}
+              onClick={() => onPriceChange(r.price.toFixed(2))}
               style={{ cursor: "pointer" }}
             >
               <div className="item-left">
