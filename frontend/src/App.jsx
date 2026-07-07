@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import TabNav from "./components/TabNav.jsx";
 import ShopifyConnectButton from "./components/ShopifyConnectButton.jsx";
 import SingleScanPanel from "./pages/SingleScanPanel.jsx";
 import BatchScanPanel from "./pages/BatchScanPanel.jsx";
+import ManualEntryPanel from "./pages/ManualEntryPanel.jsx";
 
 const TABS = [
   { id: "single", label: "Single Scan" },
@@ -21,14 +22,26 @@ function loadInitialBlurb() {
 export default function App() {
   const [activeTab, setActiveTab] = useState("single");
   const [blurb, setBlurb] = useState(loadInitialBlurb);
+  const [manualPrefill, setManualPrefill] = useState(null);
+
+  const singleInputRef = useRef(null);
+  const batchInputRef = useRef(null);
+  const manualInputRef = useRef(null);
+  const refsByTab = { single: singleInputRef, batch: batchInputRef, manual: manualInputRef };
 
   function handleBlurbChange(value) {
     setBlurb(value);
     localStorage.setItem(BLURB_KEY, value);
   }
 
-  function handleEditInManual() {
-    // Wired up fully in Task 6/7; no-op placeholder for now.
+  function handleSelectTab(tabId) {
+    setActiveTab(tabId);
+    setTimeout(() => refsByTab[tabId].current?.focus(), 0);
+  }
+
+  function handleEditInManual(book) {
+    setManualPrefill({ ...book, createdAt: new Date().toISOString() });
+    handleSelectTab("manual");
   }
 
   return (
@@ -38,13 +51,27 @@ export default function App() {
         <ShopifyConnectButton />
       </div>
       <div className="hint">Use tabs to switch between modes. Scanner focus stays on the active tab.</div>
-      <TabNav tabs={TABS} activeTab={activeTab} onSelect={setActiveTab} />
+      <TabNav tabs={TABS} activeTab={activeTab} onSelect={handleSelectTab} />
 
-      {activeTab === "single" && (
-        <SingleScanPanel blurb={blurb} onBlurbChange={handleBlurbChange} onEditInManual={handleEditInManual} />
-      )}
-      {activeTab === "batch" && <BatchScanPanel />}
-      {activeTab === "manual" && <div className="card">Manual Entry panel coming soon.</div>}
+      <div style={{ display: activeTab === "single" ? "block" : "none" }}>
+        <SingleScanPanel
+          blurb={blurb}
+          onBlurbChange={handleBlurbChange}
+          onEditInManual={handleEditInManual}
+          inputRef={singleInputRef}
+        />
+      </div>
+      <div style={{ display: activeTab === "batch" ? "block" : "none" }}>
+        <BatchScanPanel inputRef={batchInputRef} />
+      </div>
+      <div style={{ display: activeTab === "manual" ? "block" : "none" }}>
+        <ManualEntryPanel
+          blurb={blurb}
+          onBlurbChange={handleBlurbChange}
+          prefill={manualPrefill}
+          inputRef={manualInputRef}
+        />
+      </div>
     </div>
   );
 }
