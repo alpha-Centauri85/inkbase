@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import AddOnsPanel from "../components/AddOnsPanel.jsx";
+import PriceCheck from "../components/PriceCheck.jsx";
 import QueueList from "../components/QueueList.jsx";
 import { normalizeIsbn } from "../lib/isbn.js";
 import { loadJSON, saveJSON } from "../lib/storage.js";
@@ -17,6 +18,7 @@ export default function ManualEntryPanel({ blurb, onBlurbChange, prefill, inputR
   const [author, setAuthor] = useState("");
   const [genre, setGenre] = useState("");
   const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
   const [bookSize, setBookSize] = useState("");
   const [items, setItems] = useState(() => loadJSON(STORAGE_KEY, []));
 
@@ -31,6 +33,7 @@ export default function ManualEntryPanel({ blurb, onBlurbChange, prefill, inputR
     setAuthor(prefill.author || "");
     setGenre(prefill.genre || "");
     setDescription(prefill.description || "");
+    setPrice("");
   }, [prefill]);
 
   function clearForm() {
@@ -39,6 +42,7 @@ export default function ManualEntryPanel({ blurb, onBlurbChange, prefill, inputR
     setAuthor("");
     setGenre("");
     setDescription("");
+    setPrice("");
   }
 
   function handleAdd() {
@@ -53,6 +57,7 @@ export default function ManualEntryPanel({ blurb, onBlurbChange, prefill, inputR
         author: author.trim(),
         genre: genre.trim(),
         description: description.trim(),
+        price: price.trim(),
         createdAt: new Date().toISOString(),
         status: "pending",
       },
@@ -143,6 +148,13 @@ export default function ManualEntryPanel({ blurb, onBlurbChange, prefill, inputR
         placeholder="Short synopsis / notes..."
       />
 
+      <PriceCheck
+        price={price}
+        onPriceChange={setPrice}
+        title={title}
+        author={author}
+      />
+
       <AddOnsPanel
         groupName="manual"
         blurb={blurb}
@@ -164,7 +176,7 @@ export default function ManualEntryPanel({ blurb, onBlurbChange, prefill, inputR
         renderSub={(it) =>
           `${new Date(it.createdAt).toLocaleTimeString()} — ${it.author || ""} ${
             it.genre ? "• " + it.genre : ""
-          } • ${it.status}`
+          } ${it.price ? "• $" + it.price : ""} • ${it.status}`
         }
         onRemove={handleRemove}
       />
