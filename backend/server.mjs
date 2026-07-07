@@ -57,6 +57,10 @@ const PORT = Number(process.env.PORT || 3000);
 // (enable the "Books API", create an API Key credential) and put it in .env.
 const GOOGLE_BOOKS_API_KEY = process.env.GOOGLE_BOOKS_API_KEY || "";
 
+// SerpApi key for price-comparison lookups (Google Shopping engine).
+// Sign up at https://serpapi.com/ and put the key in .env.
+const SERPAPI_KEY = process.env.SERPAPI_KEY || "";
+
 const variantUpdateMutation = `
   mutation VariantBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
     productVariantsBulkUpdate(productId: $productId, variants: $variants) {
@@ -119,6 +123,10 @@ if (!SHOPIFY_ADMIN_TOKEN) {
 
 if (!GOOGLE_BOOKS_API_KEY) {
   console.warn("GOOGLE_BOOKS_API_KEY is missing. Book lookups will share Google's low-volume anonymous quota.");
+}
+
+if (!SERPAPI_KEY) {
+  console.warn("SERPAPI_KEY is missing. /api/price-check will return an error until it's set.");
 }
 
 // ------------------------------------------------------------
@@ -475,6 +483,61 @@ app.get("/api/book-lookup", async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
+});
+
+async function fetchSerpApiMarketPrices(query, { gl, googleDomain, currency }) {
+  const url =
+    `https://serpapi.com/search.json?engine=google_shopping` +
+    `&q=${encodeURIComponent(query)}` +
+    `&gl=${gl}&google_domain=${googleDomain}` +
+    `&api_key=${encodeURIComponent(SERPAPI_KEY)}`;
+
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data?.error || `SerpApi HTTP ${res.status}`);
+  }
+
+  const shoppingResults = Array.isArray(data.shopping_results) ? data.shopping_results : [];
+
+  return shoppingResults
+    .filter((r) => typeof r.extracted_price === "number")
+    .slice(0, 3)
+    .map((r) => ({
+      price: r.extracted_price,
+      currency,
+      source: r.source || "Unknown seller",
+    }));
+}
+
+app.get("/api/price-check", async (req, res) => {
+  const title = (req.query.title || "").trim();
+  const author = (req.query.author || "").trim();
+
+  if (!title) {
+    return res.status(400).json({ error: "Missing title query param" });
+  }
+
+  if (!SERPAPI_KEY) {
+    return res.status(500).json({ error: "Missing SERPAPI_KEY. Set it in backend/.env." });
+  }
+
+  const query = [title, author].filter(Boolean).join(" ");
+
+  const [nzResult, auResult] = await Promise.allSettled([
+    fetchSerpApiMarketPrices(query, { gl: "nz", googleDomain: "google.co.nz", currency: "NZD" }),
+    fetchSerpApiMarketPrices(query, { gl: "au", googleDomain: "google.com.au", currency: "AUD" }),
+  ]);
+
+  if (nzResult.status === "rejected" && auResult.status === "rejected") {
+    return res.status(502).json({ error: nzResult.reason?.message || "SerpApi request failed" });
+  }
+
+  const nzPrices = nzResult.status === "fulfilled" ? nzResult.value : [];
+  const auPrices = auResult.status === "fulfilled" ? auResult.value : [];
+
+  res.json({ results: [...nzPrices, ...auPrices] });
 });
 
 app.post("/api/batch", async (req, res) => {
