@@ -8,8 +8,8 @@ start "Inkbase Backend" cmd /k ^
 REM Small delay to avoid race conditions
 timeout /t 2 >nul
 
-REM Start frontend
+REM Build and serve the frontend production bundle
 start "Inkbase Frontend" cmd /k ^
-  "cd /d C:\Users\leesa\OneDrive - Marque Group Solutions\Personal\Inkbase\frontend && npx serve . -1 8000"
+  "cd /d C:\Users\leesa\OneDrive - Marque Group Solutions\Personal\Inkbase\frontend && npm run build && npx serve dist -l 8000"
 
 echo All services started.
