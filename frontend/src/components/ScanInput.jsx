@@ -7,17 +7,22 @@ export default function ScanInput({ value, onChange, onSubmit, placeholder, auto
   const localRef = useRef(null);
   const ref = inputRef || localRef;
 
+  const onSubmitRef = useRef(onSubmit);
+  useEffect(() => {
+    onSubmitRef.current = onSubmit;
+  }, [onSubmit]);
+
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
   function handleKeyDown(e) {
     if (e.key === "Enter") {
       e.preventDefault();
       clearTimeout(timerRef.current);
-      onSubmit();
+      onSubmitRef.current();
       return;
     }
     clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(onSubmit, SCAN_DONE_DELAY_MS);
+    timerRef.current = setTimeout(() => onSubmitRef.current(), SCAN_DONE_DELAY_MS);
   }
 
   return (
