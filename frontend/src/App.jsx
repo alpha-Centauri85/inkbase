@@ -2,6 +2,7 @@ import { useState } from "react";
 import TabNav from "./components/TabNav.jsx";
 import ShopifyConnectButton from "./components/ShopifyConnectButton.jsx";
 import SingleScanPanel from "./pages/SingleScanPanel.jsx";
+import BatchScanPanel from "./pages/BatchScanPanel.jsx";
 
 const TABS = [
   { id: "single", label: "Single Scan" },
@@ -42,7 +43,7 @@ export default function App() {
       {activeTab === "single" && (
         <SingleScanPanel blurb={blurb} onBlurbChange={handleBlurbChange} onEditInManual={handleEditInManual} />
       )}
-      {activeTab === "batch" && <div className="card">Batch Scan panel coming soon.</div>}
+      {activeTab === "batch" && <BatchScanPanel />}
       {activeTab === "manual" && <div className="card">Manual Entry panel coming soon.</div>}
     </div>
   );
