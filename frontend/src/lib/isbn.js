@@ -38,7 +38,7 @@ export function normalizeText(str) {
     .replace(/[–—]/g, "-");
   s = s
     .replace(/ /g, " ")
-    .replace(/[​-‏‪-‮﻿]/g, "")
+    .replace(/[​-‍﻿]/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
