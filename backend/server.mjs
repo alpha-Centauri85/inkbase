@@ -69,6 +69,16 @@ const variantUpdateMutation = `
     }
   }
 `;
+
+function buildVariantInput({ id, isbn, price }) {
+  const variant = { id, barcode: isbn, sku: `BOOK-${isbn}` };
+  const trimmedPrice = String(price ?? "").trim();
+  if (trimmedPrice) {
+    variant.price = trimmedPrice;
+  }
+  return variant;
+}
+
 function escapeHtml(s) {
   return String(s || "")
     .replace(/&/g, "&amp;")
@@ -321,7 +331,7 @@ app.post("/upload-books", async (req, res) => {
       if (product && variantId) {
         const vRes = await shopifyGraphQL(variantUpdateMutation, {
           productId: product.id,
-          variants: [{ id: variantId, barcode: isbn, sku: `BOOK-${isbn}` }],
+          variants: [buildVariantInput({ id: variantId, isbn, price: book.price })],
         });
         variantUpdate = vRes.json;
       }
@@ -421,7 +431,7 @@ app.post("/api/manual", async (req, res) => {
       if (product && variantId && isbn) {
         const vRes = await shopifyGraphQL(variantUpdateMutation, {
           productId: product.id,
-          variants: [{ id: variantId, barcode: isbn, sku: `BOOK-${isbn}` }],
+          variants: [buildVariantInput({ id: variantId, isbn, price: item.price })],
         });
         variantUpdate = vRes.json;
       }
