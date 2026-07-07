@@ -41,3 +41,9 @@ export async function uploadSingleBook(book, addOns = {}) {
 
   return r;
 }
+
+export async function checkPrice({ title, author }) {
+  const params = new URLSearchParams({ title });
+  if (author) params.set("author", author);
+  return getJSON(`/api/price-check?${params.toString()}`);
+}

@@ -3,6 +3,7 @@ import ScanInput from "../components/ScanInput.jsx";
 import AddOnsPanel from "../components/AddOnsPanel.jsx";
 import BookCard from "../components/BookCard.jsx";
 import SubmitStatus from "../components/SubmitStatus.jsx";
+import PriceCheck from "../components/PriceCheck.jsx";
 import { normalizeIsbn } from "../lib/isbn.js";
 import { fetchBookByIsbn } from "../lib/googleBooks.js";
 import { uploadSingleBook } from "../lib/api.js";
@@ -14,6 +15,7 @@ export default function SingleScanPanel({ blurb, onBlurbChange, onEditInManual, 
   const [submitStatus, setSubmitStatus] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [bookSize, setBookSize] = useState("");
+  const [price, setPrice] = useState("");
 
   async function handleScan() {
     const raw = rawInput.trim();
@@ -23,6 +25,7 @@ export default function SingleScanPanel({ blurb, onBlurbChange, onEditInManual, 
     const isbn = normalizeIsbn(raw);
     setBook(null);
     setSubmitStatus("");
+    setPrice("");
     setLookupStatus("Looking up book data...");
 
     try {
@@ -57,6 +60,7 @@ export default function SingleScanPanel({ blurb, onBlurbChange, onEditInManual, 
           author: book.author,
           genre: book.genre,
           description: book.description,
+          price,
         },
         { customBlurb: blurb, bookSize }
       );
@@ -97,6 +101,13 @@ export default function SingleScanPanel({ blurb, onBlurbChange, onEditInManual, 
         onBlurbChange={onBlurbChange}
         bookSize={bookSize}
         onBookSizeChange={setBookSize}
+      />
+
+      <PriceCheck
+        price={price}
+        onPriceChange={setPrice}
+        title={book?.title}
+        author={book?.author}
       />
 
       {lookupStatus && <p className="muted">{lookupStatus}</p>}
