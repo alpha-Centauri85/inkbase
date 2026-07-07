@@ -12,7 +12,7 @@ export default function BookCard({ book, onSubmit, onEdit, submitDisabled }) {
       <pre style={{ whiteSpace: "pre-wrap" }}>{book.description || ""}</pre>
       <div className="row" style={{ marginTop: 12 }}>
         <button className="primary" onClick={onSubmit} disabled={submitDisabled}>Submit to Shopify</button>
-        <button onClick={onEdit} disabled={submitDisabled}>Edit in Manual</button>
+        <button onClick={onEdit}>Edit in Manual</button>
       </div>
     </div>
   );
