@@ -1,5 +1,6 @@
 import { useState } from "react";
 import TabNav from "./components/TabNav.jsx";
+import ShopifyConnectButton from "./components/ShopifyConnectButton.jsx";
 
 const TABS = [
   { id: "single", label: "Single Scan" },
@@ -12,7 +13,10 @@ export default function App() {
 
   return (
     <div>
-      <h1>Inkbase</h1>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <h1 style={{ margin: 0 }}>Inkbase</h1>
+        <ShopifyConnectButton />
+      </div>
       <div className="hint">Use tabs to switch between modes. Scanner focus stays on the active tab.</div>
       <TabNav tabs={TABS} activeTab={activeTab} onSelect={setActiveTab} />
       {activeTab === "single" && <div className="card">Single Scan panel coming soon.</div>}
