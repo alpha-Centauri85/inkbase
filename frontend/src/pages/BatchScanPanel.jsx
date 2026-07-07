@@ -7,15 +7,6 @@ import { postJSON } from "../lib/api.js";
 
 const STORAGE_KEY = "batch_scans_v1";
 
-function moveToTop(list, isbn) {
-  const idx = list.findIndex((x) => x.isbn === isbn);
-  if (idx <= 0) return list;
-  const copy = [...list];
-  const [it] = copy.splice(idx, 1);
-  copy.unshift(it);
-  return copy;
-}
-
 function statusLabel(it) {
   switch (it.status) {
     case "pending":
@@ -49,10 +40,11 @@ export default function BatchScanPanel({ inputRef }) {
 
     setItems((prev) => {
       if (dedupe) {
-        const existing = prev.find((x) => x.isbn === isbn && x.status !== "ok");
-        if (existing) {
-          existing.scannedAt = new Date().toISOString();
-          return moveToTop(prev, isbn);
+        const idx = prev.findIndex((x) => x.isbn === isbn && x.status !== "ok");
+        if (idx !== -1) {
+          const updated = { ...prev[idx], scannedAt: new Date().toISOString() };
+          const rest = prev.filter((_, i) => i !== idx);
+          return [updated, ...rest];
         }
       }
       return [{ isbn, scannedAt: new Date().toISOString(), status: "pending" }, ...prev];
@@ -71,8 +63,14 @@ export default function BatchScanPanel({ inputRef }) {
     const pending = items.filter((x) => x.status === "pending" || x.status === "failed");
     if (pending.length === 0) return;
 
+    const pendingIsbns = new Set(pending.map((x) => x.isbn));
+
     setItems((prev) =>
-      prev.map((it) => (pending.includes(it) ? { ...it, status: "uploading", error: undefined } : it))
+      prev.map((it) =>
+        pendingIsbns.has(it.isbn) && it.status !== "ok"
+          ? { ...it, status: "uploading", error: undefined }
+          : it
+      )
     );
 
     try {
@@ -84,7 +82,7 @@ export default function BatchScanPanel({ inputRef }) {
 
       setItems((prev) =>
         prev.map((it) => {
-          if (!pending.includes(it)) return it;
+          if (!pendingIsbns.has(it.isbn) || it.status !== "uploading") return it;
           const r = byIsbn.get(it.isbn);
           return r?.ok
             ? { ...it, status: "ok" }
